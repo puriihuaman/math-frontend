@@ -13,7 +13,14 @@ interface DriveFile {
   size?: string;
 }
 
-const emit = defineEmits<{ close: []; selected: [files: File[]] }>();
+interface SelectedDriveFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+  size?: string;
+}
+const emit = defineEmits<{ close: []; selected: [files: SelectedDriveFile[]] }>();
 const google = useGoogleServices();
 const toast = useToast();
 const files: Ref<DriveFile[]> = ref([]);
@@ -34,26 +41,11 @@ async function loadFiles() {
   }
 }
 
-async function downloadSelected() {
-  loading.value = true;
-  error.value = "";
+function confirmSelection() {
   const chosen = files.value.filter(file => selected.value.includes(file.id));
+  emit("selected", chosen);
   emit("close");
-  try {
-    const downloaded = await Promise.all(chosen.map(file => google.downloadDriveFileAsBlob(file)));
-    emit("selected", downloaded);
-  } catch (reason) {
-    const message = reason instanceof Error ? reason.message : "No se pudieron descargar los archivos.";
-    error.value = message;
-    toast.showError(message);
-  } finally {
-    loading.value = false;
-  }
 }
-
-console.log("**".repeat(50));
-console.log(files);
-console.log("**".repeat(50));
 
 onMounted(loadFiles);
 </script>
@@ -101,7 +93,7 @@ onMounted(loadFiles);
         </button>
         <button
             class="rounded-xl bg-indigo-600 px-4 py-2 font-semibold text-white disabled:opacity-50"
-            :disabled="loading || !selected.length" @click="downloadSelected">Agregar seleccionados
+            :disabled="loading || !selected.length" @click="confirmSelection">Agregar seleccionados
         </button>
       </div>
     </div>

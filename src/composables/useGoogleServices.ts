@@ -102,6 +102,42 @@ export function useGoogleServices() {
     await ensureResponse(await fetch('https://www.googleapis.com/drive/v3/about?fields=user', { headers: { Authorization: `Bearer ${accessToken.value}` } }))
   }
 
+  async function findOrCreateBackupFolder(): Promise<string> {
+    if (!accessToken.value) throw new Error('Google no está conectado.')
+    const name = 'DiscretaFlow - Matemática Discreta'
+    const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
+    const params = new URLSearchParams({ q: query, fields: 'files(id,name)', pageSize: '10' })
+    const listResponse = await ensureResponse(await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken.value}` }
+    }))
+    const list = await listResponse.json() as { files?: Array<{ id: string }> }
+    if (list.files?.[0]?.id) return list.files[0].id
+
+    const createResponse = await ensureResponse(await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken.value}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder' })
+    }))
+    const created = await createResponse.json() as { id: string }
+    return created.id
+  }
+
+  async function uploadLocalFilesToFolder(files: File[]) {
+    if (!accessToken.value) throw new Error('Google no está conectado.')
+    const folderId = await findOrCreateBackupFolder()
+    await Promise.all(files.map(async file => {
+      const metadata = { name: file.name, parents: [folderId] }
+      const body = new FormData()
+      body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+      body.append('file', file)
+      await ensureResponse(await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken.value}` },
+        body
+      }))
+    }))
+  }
+
   async function scheduleWeek(week: WeekData, settings: UserSettings, onlyPending = false) {
     if (!accessToken.value) throw new Error('Conecta Google para agendar sesiones.')
     const subs = (onlyPending ? week.subtemas.filter(sub => !sub.completado) : week.subtemas).slice().sort((a, b) => a.orden - b.orden)
@@ -116,5 +152,5 @@ export function useGoogleServices() {
     return ids
   }
 
-  return { connected, connecting, accessToken, userEmail, error, connect, disconnect, listDriveFiles, downloadDriveFileAsBlob, backupProgress, verifyConnection, scheduleWeek }
+  return { connected, connecting, accessToken, userEmail, error, connect, disconnect, listDriveFiles, downloadDriveFileAsBlob, backupProgress, verifyConnection, uploadLocalFilesToFolder, scheduleWeek }
 }
