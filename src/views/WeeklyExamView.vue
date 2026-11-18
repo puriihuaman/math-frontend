@@ -1,0 +1,15 @@
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { useStudyStore } from '../stores/useStudyStore'
+import { apiClient } from '../services/apiClient'
+import ExerciseRunner from '../components/study/ExerciseRunner.vue'
+import FocusTimerBar from '../components/focus/FocusTimerBar.vue'
+import { useFocusMonitor } from '../composables/useFocusMonitor'
+import type { Ejercicio } from '../types/study'
+import NavbarHeader from '../components/common/NavbarHeader.vue'
+const route = useRoute(); const store = useStudyStore(); const modulo = Number(route.params.modulo); const semana = Number(route.params.semana); const exercises = ref<Ejercicio[]>([]); const loading = ref(true); const error = ref(''); const focus = useFocusMonitor('Examen semanal'); const week = computed(() => store.weeks.find(w => w.modulo === modulo && w.semana === semana))
+onMounted(async () => { store.hydrate(); try { exercises.value = await apiClient.generateExam({ modulo, semana, subtemas: week.value?.subtemas }) } catch (e) { error.value = e instanceof Error ? e.message : 'No se pudo generar el examen.' } finally { loading.value = false } })
+function finish() { store.addExamResult({ week: `${modulo}.${semana}`, score: 0, correct: 0, total: exercises.value.length, date: new Date().toISOString() }); history.back() }
+</script>
+<template><div><NavbarHeader /><main class="mx-auto max-w-3xl space-y-5 px-5 py-6"><RouterLink to="/" class="text-sm text-slate-500">← Volver</RouterLink><h1 class="text-3xl font-black">Test examen · Semana {{ modulo }}.{{ semana }}</h1><FocusTimerBar :remaining="focus.remainingSeconds.value" :paused="focus.paused.value" @pause="focus.pause" @resume="focus.resume" @fullscreen="focus.toggleFullscreen" /><p class="text-slate-500">10 preguntas integradoras · sin pistas · retroalimentación al finalizar.</p><p v-if="error" class="rounded-xl bg-red-50 p-3 text-red-700">{{ error }}</p><p v-if="loading">Generando examen…</p><ExerciseRunner v-else :exercises="exercises" :modulo="modulo" :semana="semana" subtema-id="exam" @complete="finish" /></main></div></template>

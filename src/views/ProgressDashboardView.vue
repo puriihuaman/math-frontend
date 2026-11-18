@@ -1,0 +1,9 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useStudyStore } from '../stores/useStudyStore'
+import { useGoogleServices } from '../composables/useGoogleServices'
+import NavbarHeader from '../components/common/NavbarHeader.vue'
+const store = useStudyStore(); const google = useGoogleServices(); const total = computed(() => store.weeks.reduce((n, w) => n + w.subtemas.length, 0)); const progress = computed(() => total.value ? Math.round(store.totalCompleted / total.value * 100) : 0); const distractionMinutes = computed(() => Math.round(store.incidents.reduce((n, i) => n + i.duracionSegundos, 0) / 60))
+async function backup() { try { await google.backupProgress(); alert('Respaldo guardado en Google Drive.') } catch (e) { alert(e instanceof Error ? e.message : 'No se pudo respaldar.') } }
+</script>
+<template><div><NavbarHeader /><main class="mx-auto max-w-7xl px-5 py-10"><h1 class="text-3xl font-black">Tu progreso</h1><div class="mt-6 grid gap-4 sm:grid-cols-3"><div class="card"><p class="text-sm text-slate-500">Racha actual</p><strong class="text-3xl">{{ store.streak }} días</strong></div><div class="card"><p class="text-sm text-slate-500">Progreso del ciclo</p><strong class="text-3xl">{{ progress }}%</strong></div><div class="card"><p class="text-sm text-slate-500">Interrupciones</p><strong class="text-3xl">{{ store.incidents.length }}</strong><p class="text-sm text-slate-500">{{ distractionMinutes }} minutos registrados</p></div></div><div class="card mt-6"><div class="mb-3 flex justify-between"><h2 class="font-bold">Progreso global</h2><span>{{ store.totalCompleted }} / {{ total }} subtemas</span></div><div class="h-4 rounded-full bg-slate-100 dark:bg-slate-800"><div class="h-full rounded-full bg-accent" :style="{ width: `${progress}%` }" /></div></div><button class="btn-primary mt-6" @click="backup">Forzar respaldo en Google Drive</button></main></div></template>

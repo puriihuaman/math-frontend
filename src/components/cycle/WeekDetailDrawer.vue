@@ -1,0 +1,5 @@
+<script setup lang="ts">
+import type { WeekData } from '../../types/study'
+defineProps<{ week: WeekData }>(); defineEmits<{ close: []; schedule: []; exam: [] }>()
+</script>
+<template><aside class="fixed inset-y-0 right-0 z-40 w-full max-w-md overflow-y-auto border-l bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900"><button class="float-right" @click="$emit('close')">✕</button><h2 class="mb-2 text-2xl font-bold">Módulo {{ week.modulo }} · Semana {{ week.semana }}</h2><p class="mb-6 text-slate-500">{{ week.titulo_semana || 'Semana de estudio' }}</p><div class="space-y-3"><RouterLink v-for="sub in week.subtemas" :key="sub.id" class="block rounded-xl border p-4 hover:border-accent" :to="`/session/${week.modulo}/${week.semana}/${sub.id}`">{{ sub.orden }}. {{ sub.titulo }} <span v-if="sub.completado">✓</span></RouterLink></div><button class="btn-muted mt-6 w-full" @click="$emit('schedule')">Agendar sesiones en Calendar</button><button class="btn-primary mt-2 w-full" @click="$emit('exam')">Rendir Test Examen Semanal</button></aside></template>
