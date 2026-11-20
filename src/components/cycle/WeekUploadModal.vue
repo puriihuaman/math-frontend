@@ -109,7 +109,7 @@ async function process() {
     <form class="panel w-full max-w-lg" @submit.prevent="process">
       <div class="flex justify-between"><h2 class="text-xl font-bold text-white">Cargar semana
         {{ week.modulo }}.{{ week.semana }}</h2>
-        <button class="text-slate-400" @click="$emit('close')">✕</button>
+        <button type="button" class="text-slate-400" @click="$emit('close')">✕</button>
       </div>
       <p class="my-4 text-slate-400">Combina archivos PDF y PPTX del material de esta semana.</p>
       <p class="mb-3 text-sm font-medium"
@@ -145,7 +145,7 @@ async function process() {
       </div>
       <p v-if="error" class="mt-3 rounded-xl border border-red-500/30 bg-red-950 p-3 text-red-200">
         {{ error }}
-        <button class="font-bold underline" @click="process">Reintentar procesamiento</button>
+        <button type="button" class="font-bold underline" @click="process">Reintentar procesamiento</button>
       </p>
       <button type="submit" class="btn-primary mt-5 w-full" :disabled="busy || !queuedFiles.length">
         {{ busy ? "Procesando…" : "Procesar material" }}

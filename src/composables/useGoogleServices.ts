@@ -5,9 +5,11 @@ import { useToast } from './useToast'
 
 interface GoogleTokenResponse { access_token?: string; expires_in?: number; error?: string }
 interface TokenClient { requestAccessToken: () => void }
-interface DriveFile { id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }
-interface DriveListResponse { files: DriveFile[] }
-interface GoogleOauth2 { initTokenClient: (config: { client_id: string; scope: string; callback: (response: GoogleTokenResponse) => void }) => TokenClient; revoke: (token: string, callback?: () => void) => void }
+export interface DriveFile { id: string; name: string; mimeType: string; modifiedTime?: string; size?: string }
+interface GoogleOauth2 {
+  initTokenClient: (config: { client_id: string; scope: string; callback: (response: GoogleTokenResponse) => void }) => TokenClient
+  revoke: (token: string, callback?: () => void) => void
+}
 declare global { interface Window { google?: { accounts: { oauth2: GoogleOauth2 } } } }
 
 const connecting = ref(false)
@@ -28,12 +30,12 @@ function waitForGoogleScripts(timeoutMs = 8000): Promise<void> {
 }
 
 export function useGoogleServices() {
-  const studyStore = useStudyStore()
-  studyStore.hydrate()
+  const store = useStudyStore()
+  store.hydrate()
   const toast = useToast()
-  const accessToken = computed(() => studyStore.isGoogleTokenValid ? studyStore.googleAuth.accessToken : null)
-  const connected = computed(() => studyStore.isGoogleTokenValid)
-  const userEmail = computed(() => studyStore.googleAuth.userEmail)
+  const accessToken = computed(() => store.isGoogleTokenValid ? store.googleAuth.accessToken : null)
+  const connected = computed(() => store.isGoogleTokenValid)
+  const userEmail = computed(() => store.googleAuth.userEmail)
 
   function connect() {
     error.value = ''
@@ -50,7 +52,7 @@ export function useGoogleServices() {
             const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${response.access_token}` } })
             if (!profileResponse.ok) throw new Error('No se pudo obtener el perfil de Google.')
             const profile = await profileResponse.json() as { email?: string; name?: string }
-            studyStore.setGoogleAuth({ accessToken: response.access_token!, expiresAt, userEmail: profile.email || null, userName: profile.name || null })
+            store.setGoogleAuth({ accessToken: response.access_token!, expiresAt, userEmail: profile.email || null, userName: profile.name || null })
             toast.showSuccess(`Google conectado${profile.email ? ` como ${profile.email}` : ''}.`)
           })().catch(reason => { const message = reason instanceof Error ? reason.message : 'No se pudo completar la conexión con Google.'; error.value = message; toast.showError(message) }).finally(() => { connecting.value = false })
         }
@@ -60,14 +62,14 @@ export function useGoogleServices() {
   }
 
   function disconnect() {
-    const token = studyStore.googleAuth.accessToken
+    const token = store.googleAuth.accessToken
     if (token && window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(token)
-    studyStore.clearGoogleAuth()
+    store.clearGoogleAuth()
     toast.showInfo('Cuenta de Google desconectada.')
   }
 
   async function ensureResponse(response: Response, unauthorizedMessage = 'La sesión de Google expiró. Reconecta tu cuenta en Configuración.') {
-    if (response.status === 401) { studyStore.clearGoogleAuth(); throw new Error(unauthorizedMessage) }
+    if (response.status === 401) { store.clearGoogleAuth(); throw new Error(unauthorizedMessage) }
     if (!response.ok) throw new Error(`Google Drive respondió con error ${response.status}.`)
     return response
   }
@@ -77,7 +79,7 @@ export function useGoogleServices() {
     const query = "(mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.presentationml.presentation') and trashed=false"
     const params = new URLSearchParams({ q: query, fields: 'files(id,name,mimeType,modifiedTime,size)', orderBy: 'modifiedTime desc', pageSize: '25' })
     const response = await ensureResponse(await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken.value}` } }))
-    const data = await response.json() as DriveListResponse
+    const data = await response.json() as { files: DriveFile[] }
     return search.trim() ? data.files.filter(file => file.name.toLowerCase().includes(search.trim().toLowerCase())) : data.files
   }
 
@@ -89,7 +91,6 @@ export function useGoogleServices() {
 
   async function backupProgress() {
     if (!accessToken.value) throw new Error('Google no está conectado.')
-    const store = useStudyStore()
     const metadata = { name: 'discretaflow_progress.json', parents: ['appDataFolder'] }
     const body = new FormData()
     body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
@@ -107,12 +108,9 @@ export function useGoogleServices() {
     const name = 'DiscretaFlow - Matemática Discreta'
     const query = `name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`
     const params = new URLSearchParams({ q: query, fields: 'files(id,name)', pageSize: '10' })
-    const listResponse = await ensureResponse(await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-      headers: { Authorization: `Bearer ${accessToken.value}` }
-    }))
+    const listResponse = await ensureResponse(await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, { headers: { Authorization: `Bearer ${accessToken.value}` } }))
     const list = await listResponse.json() as { files?: Array<{ id: string }> }
     if (list.files?.[0]?.id) return list.files[0].id
-
     const createResponse = await ensureResponse(await fetch('https://www.googleapis.com/drive/v3/files', {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken.value}`, 'Content-Type': 'application/json' },
@@ -126,31 +124,72 @@ export function useGoogleServices() {
     if (!accessToken.value) throw new Error('Google no está conectado.')
     const folderId = await findOrCreateBackupFolder()
     await Promise.all(files.map(async file => {
-      const metadata = { name: file.name, parents: [folderId] }
       const body = new FormData()
-      body.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }))
+      body.append('metadata', new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: 'application/json' }))
       body.append('file', file)
-      await ensureResponse(await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken.value}` },
-        body
-      }))
+      await ensureResponse(await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', { method: 'POST', headers: { Authorization: `Bearer ${accessToken.value}` }, body }))
     }))
   }
 
-  async function scheduleWeek(week: WeekData, settings: UserSettings, onlyPending = false) {
-    if (!accessToken.value) throw new Error('Conecta Google para agendar sesiones.')
-    const subs = (onlyPending ? week.subtemas.filter(sub => !sub.completado) : week.subtemas).slice().sort((a, b) => a.orden - b.orden)
-    const ids: string[] = []; const start = new Date()
-    for (let i = 0; i < subs.length; i++) {
-      const date = new Date(start); date.setDate(start.getDate() + i)
-      const [hour, minute] = settings.horaEstudioPreferida.split(':').map(Number); date.setHours(hour, minute, 0, 0)
-      const end = new Date(date); end.setMinutes(end.getMinutes() + settings.duracionSesionMinutos)
-      const response = await ensureResponse(await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', { method: 'POST', headers: { Authorization: `Bearer ${accessToken.value}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: `DiscretaFlow: ${subs[i].titulo}`, start: { dateTime: date.toISOString() }, end: { dateTime: end.toISOString() } }) }))
-      ids.push((await response.json()).id)
+  async function scheduleWeekSessions(week: WeekData, onlyPending = false) {
+    if (!store.isGoogleTokenValid || !accessToken.value) {
+      toast.showWarning('Conecta Google en Configuración para agendar sesiones.')
+      throw new Error('Google no está conectado.')
     }
+    const settings = store.settings
+    const subs = (onlyPending ? week.subtemas.filter(sub => !sub.completado) : week.subtemas).slice().sort((a, b) => a.orden - b.orden)
+    const ids: string[] = []
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+    const [hour, minute] = settings.horaEstudioPreferida.split(':').map(Number)
+    const firstDate = new Date()
+    firstDate.setSeconds(0, 0)
+    firstDate.setMinutes(minute)
+    firstDate.setHours(hour)
+    if (firstDate.getTime() <= Date.now()) firstDate.setDate(firstDate.getDate() + 1)
+
+    for (let i = 0; i < subs.length; i++) {
+      const start = new Date(firstDate)
+      start.setDate(firstDate.getDate() + i)
+      const end = new Date(start)
+      end.setMinutes(end.getMinutes() + settings.duracionSesionMinutos)
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken.value}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: `DiscretaFlow: ${subs[i].titulo} (M${week.modulo}.S${week.semana})`,
+          description: `${subs[i].explicacion_simplificada}\n\nConceptos clave:\n-${subs[i].conceptos_fundamentales.join('\n- ')}`,
+          start: { dateTime: start.toISOString(), timeZone: timezone },
+          end: { dateTime: end.toISOString(), timeZone: timezone }
+        })
+      })
+      if (response.status === 401) { store.clearGoogleAuth(); toast.showError('La sesión de Google expiró. Reconecta tu cuenta en Configuración.'); throw new Error('Sesión de Google expirada.') }
+      if (response.status === 403) { toast.showError('Google rechazó permisos de Calendar. Reconecta tu cuenta en Configuración para otorgar permisos.'); throw new Error('Permisos de Calendar insuficientes.') }
+      if (!response.ok) throw new Error(`Google Calendar respondió con error ${response.status}.`)
+      ids.push((await response.json() as { id: string }).id)
+    }
+    store.updateWeek({ ...week, calendarEventIds: [...(week.calendarEventIds || []), ...ids] })
+    toast.showSuccess(`${ids.length} sesión(es) agendada(s) en Google Calendar.`)
     return ids
   }
 
-  return { connected, connecting, accessToken, userEmail, error, connect, disconnect, listDriveFiles, downloadDriveFileAsBlob, backupProgress, verifyConnection, uploadLocalFilesToFolder, scheduleWeek }
+  async function reschedulePendingSessions(week: WeekData) {
+    if (!store.isGoogleTokenValid || !accessToken.value) {
+      toast.showWarning('Conecta Google en Configuración para reprogramar sesiones.')
+      throw new Error('Google no está conectado.')
+    }
+    for (const eventId of week.calendarEventIds || []) {
+      const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${accessToken.value}` }
+      })
+      if (response.status === 401) { store.clearGoogleAuth(); toast.showError('Reconecta tu cuenta de Google en Configuración.'); throw new Error('Sesión expirada.') }
+      if (response.status === 403) toast.showError('Google rechazó permisos de Calendar. Reconecta tu cuenta en Configuración.')
+    }
+    const ids = await scheduleWeekSessions({ ...week, calendarEventIds: [] }, true)
+    store.updateWeek({ ...week, calendarEventIds: ids })
+    toast.showSuccess(`Se reprogramaron ${ids.length} sesión(es) pendientes desde hoy.`)
+    return ids
+  }
+
+  return { connected, connecting, accessToken, userEmail, error, connect, disconnect, listDriveFiles, downloadDriveFileAsBlob, backupProgress, verifyConnection, uploadLocalFilesToFolder, scheduleWeekSessions, reschedulePendingSessions }
 }

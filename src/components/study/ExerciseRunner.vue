@@ -1,12 +1,76 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import type { Ejercicio } from '../../types/study'
-import { apiClient } from '../../services/apiClient'
-import MathRenderer from '../common/MathRenderer.vue'
-const props = defineProps<{ exercises: Ejercicio[]; modulo: number; semana: number; subtemaId: string }>()
-const emit = defineEmits<{ complete: [] }>(); const index = ref(0); const answer = ref(''); const feedback = ref(''); const showHint = ref(false); const busy = ref(false)
-const exercise = computed(() => props.exercises[index.value]); const answered = computed(() => Boolean(feedback.value))
-async function submit() { if (!answer.value.trim() || busy.value) return; busy.value = true; if (exercise.value.tipo === 'opcion_multiple') feedback.value = answer.value === exercise.value.respuesta_correcta ? `¡Correcto! ${exercise.value.explicacion_paso_a_paso}` : `La respuesta correcta es ${exercise.value.respuesta_correcta}. ${exercise.value.explicacion_paso_a_paso}`; else { try { const result = await apiClient.evaluateShortAnswer({ ejercicio: exercise.value, respuesta: answer.value }); feedback.value = `${result.score}/100 · ${result.retroalimentacion}` } catch (e) { feedback.value = e instanceof Error ? e.message : 'No se pudo evaluar.' } } busy.value = false }
-function next() { if (index.value === props.exercises.length - 1) emit('complete'); else { index.value++; answer.value = ''; feedback.value = ''; showHint.value = false } }
+import {computed, ref} from "vue";
+import type {Ejercicio} from "../../types/study";
+import {apiClient} from "../../services/apiClient";
+import MathRenderer from "../common/MathRenderer.vue";
+
+const props = defineProps<{
+  exercises: Ejercicio[];
+  modulo: number;
+  semana: number;
+  subtemaId: string
+}>();
+const emit = defineEmits<{ complete: []; progress: [index: number] }>();
+const index = ref(0);
+const answer = ref("");
+const feedback = ref("");
+const showHint = ref(false);
+const busy = ref(false);
+const exercise = computed(() => props.exercises[index.value]);
+const answered = computed(() => Boolean(feedback.value));
+
+async function submit() {
+  if (!answer.value.trim() || busy.value) return;
+  busy.value = true;
+  if (exercise.value.tipo === "opcion_multiple") feedback.value = answer.value === exercise.value.respuesta_correcta ? `¡Correcto! ${exercise.value.explicacion_paso_a_paso}` : `La respuesta correcta es ${exercise.value.respuesta_correcta}. ${exercise.value.explicacion_paso_a_paso}`; else {
+    try {
+      const result = await apiClient.evaluateShortAnswer({
+        ejercicio: exercise.value,
+        respuesta: answer.value,
+      });
+      feedback.value = `${result.score}/100 · ${result.retroalimentacion}`;
+    } catch (e) {
+      feedback.value = e instanceof Error ? e.message : "No se pudo evaluar.";
+    }
+  }
+  busy.value = false;
+}
+
+function next() {
+  if (index.value === props.exercises.length - 1) emit("complete"); else {
+    index.value++;
+    emit("progress", index.value);
+    answer.value = "";
+    feedback.value = "";
+    showHint.value = false;
+  }
+}
 </script>
-<template><form v-if="exercise" class="card space-y-5" @submit.prevent="answered ? next() : submit()"><div class="flex justify-between text-sm"><span>Ejercicio {{ index + 1 }} de {{ exercises.length }}</span><span class="rounded-full bg-indigo-500/10 px-3 py-1 text-indigo-300">{{ exercise.nivel }}</span></div><p class="text-sm text-slate-500">Resuelve en papel y lápiz antes de responder.</p><MathRenderer :content="exercise.enunciado" /><div v-if="exercise.tipo === 'opcion_multiple'" class="space-y-2"><label v-for="option in exercise.opciones || []" :key="option" class="flex cursor-pointer gap-2 rounded-xl border border-slate-800 p-3 has-[:checked]:border-indigo-500"><input v-model="answer" type="radio" :value="option" :disabled="answered" />{{ option }}</label></div><input v-else v-model="answer" class="w-full rounded-xl border border-slate-700 bg-slate-950 p-3" placeholder="Escribe tu respuesta" :disabled="answered" /><button v-if="!answered" type="button" class="btn-secondary" @click="showHint = !showHint">Necesito una pista</button><p v-if="showHint" class="rounded-xl bg-amber-950 p-3 text-amber-100">{{ exercise.pista }}</p><div v-if="feedback" class="rounded-xl bg-emerald-950 p-3 text-emerald-100">{{ feedback }}</div><button class="btn-primary w-full" :disabled="!answer || busy">{{ answered ? (index === exercises.length - 1 ? 'Finalizar sesión' : 'Siguiente ejercicio') : 'Evaluar respuesta' }}</button></form></template>
+<template>
+  <form v-if="exercise" class="card space-y-5" @submit.prevent="answered ? next() : submit()">
+    <div class="flex justify-between text-sm"><span>Ejercicio {{ index + 1 }} de {{
+        exercises.length
+      }}</span><span
+        class="rounded-full bg-indigo-500/10 px-3 py-1 text-indigo-300">{{ exercise.nivel }}</span>
+    </div>
+    <p class="text-sm text-slate-500">Resuelve en papel y lápiz antes de responder.</p>
+    <MathRenderer :content="exercise.enunciado"/>
+    <div v-if="exercise.tipo === 'opcion_multiple'" class="space-y-2"><label
+        v-for="option in exercise.opciones || []" :key="option"
+        class="flex cursor-pointer gap-2 rounded-xl border border-slate-800 p-3 has-[:checked]:border-indigo-500"><input
+        v-model="answer" type="radio" :value="option" :disabled="answered"/>{{ option }}</label>
+    </div>
+    <input v-else v-model="answer"
+           class="w-full rounded-xl border border-slate-700 bg-slate-950 p-3"
+           placeholder="Escribe tu respuesta" :disabled="answered"/>
+    <button v-if="!answered" type="button" class="btn-secondary" @click="showHint = !showHint">
+      Necesito una pista
+    </button>
+    <p v-if="showHint" class="rounded-xl bg-amber-950 p-3 text-amber-100">{{ exercise.pista }}</p>
+    <div v-if="feedback" class="rounded-xl bg-emerald-950 p-3 text-emerald-100">{{ feedback }}</div>
+    <button class="btn-primary w-full" :disabled="!answer || busy">{{
+        answered ? (index === exercises.length - 1 ? "Finalizar sesión" : "Siguiente ejercicio") : "Evaluar respuesta"
+      }}
+    </button>
+  </form>
+</template>
