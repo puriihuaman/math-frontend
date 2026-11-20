@@ -12,5 +12,5 @@
   .status-chip { @apply flex items-center gap-1.5 rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 text-xs font-semibold; }
   .nav-link { @apply flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-slate-400 hover:bg-slate-800 hover:text-white; }
   .router-link-active.nav-link { @apply bg-indigo-500/10 text-indigo-300; }
-  label { @apply text-sm text-slate-400; } label input, label select { @apply mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-slate-200 outline-none focus:border-indigo-500; }
+  label { @apply text-sm text-slate-400; } label input:not([type='radio']):not([type='checkbox']), label select { @apply mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-slate-200 outline-none focus:border-indigo-500; }
 }
